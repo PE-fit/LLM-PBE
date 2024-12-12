@@ -1,10 +1,12 @@
 # import requests
-from openai import OpenAI
 import time
-import tiktoken
 from copy import deepcopy
 
+import tiktoken
+from openai import OpenAI
+
 from models.LLMBase import LLMBase
+
 
 def num_tokens_from_messages(messages, model="gpt-3.5-turbo-0613"):
     """Return the number of tokens used by a list of messages."""
@@ -20,17 +22,23 @@ def num_tokens_from_messages(messages, model="gpt-3.5-turbo-0613"):
         "gpt-4-32k-0314",
         "gpt-4-0613",
         "gpt-4-32k-0613",
-        }:
+    }:
         tokens_per_message = 3
         tokens_per_name = 1
     elif model == "gpt-3.5-turbo-0301":
-        tokens_per_message = 4  # every message follows <|start|>{role/name}\n{content}<|end|>\n
+        tokens_per_message = (
+            4  # every message follows <|start|>{role/name}\n{content}<|end|>\n
+        )
         tokens_per_name = -1  # if there's a name, the role is omitted
     elif "gpt-3.5-turbo" in model:
-        print("Warning: gpt-3.5-turbo may update over time. Returning num tokens assuming gpt-3.5-turbo-0613.")
+        print(
+            "Warning: gpt-3.5-turbo may update over time. Returning num tokens assuming gpt-3.5-turbo-0613."
+        )
         return num_tokens_from_messages(messages, model="gpt-3.5-turbo-0613")
     elif "gpt-4" in model:
-        print("Warning: gpt-4 may update over time. Returning num tokens assuming gpt-4-0613.")
+        print(
+            "Warning: gpt-4 may update over time. Returning num tokens assuming gpt-4-0613."
+        )
         return num_tokens_from_messages(messages, model="gpt-4-0613")
     else:
         raise NotImplementedError(
@@ -46,8 +54,16 @@ def num_tokens_from_messages(messages, model="gpt-3.5-turbo-0613"):
     num_tokens += 3  # every reply is primed with <|start|>assistant<|message|>
     return num_tokens
 
+
 class ChatGPT(LLMBase):
-    def __init__(self, api_key=None, model = None, max_attempts = 100, max_tokens=2048, temperature=0.7):
+    def __init__(
+        self,
+        api_key=None,
+        model=None,
+        max_attempts=100,
+        max_tokens=2048,
+        temperature=0.7,
+    ):
         self.api_key = api_key
         self.client = OpenAI(
             api_key=self.api_key,
@@ -55,9 +71,8 @@ class ChatGPT(LLMBase):
         self.max_attempts = max_attempts
         self.delay_seconds = 1
         self.model = model
-        self.parameters = {'max_tokens': max_tokens, 'temperature': temperature}
-        
-        
+        self.parameters = {"max_tokens": max_tokens, "temperature": temperature}
+
     def query_remote_model(self, prompt, messages=None):
         n_attempt = 0
         params = deepcopy(self.parameters)
@@ -65,12 +80,14 @@ class ChatGPT(LLMBase):
             messages = [{"role": "user", "content": prompt}]
         while n_attempt < self.max_attempts:
             num_tokens = num_tokens_from_messages(messages)
-            if num_tokens > 4096 - params['max_tokens']:
-                params['max_tokens'] = 4096 - num_tokens - 20
-                if params['max_tokens'] < 1:
-                    return ''  # cannot generate anything.
+            if num_tokens > 4096 - params["max_tokens"]:
+                params["max_tokens"] = 4096 - num_tokens - 20
+                if params["max_tokens"] < 1:
+                    return ""  # cannot generate anything.
             try:
-                response = self.client.chat.completions.create(model=self.model, messages=messages, **params)
+                response = self.client.chat.completions.create(
+                    model=self.model, messages=messages, **params
+                )
             except Exception as e:
                 # Catch any exception that might occur and print an error message
                 print(f"An error occurred: {e}")

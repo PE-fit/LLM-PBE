@@ -1,11 +1,12 @@
 import torch
-from transformers import GPT2LMHeadModel, GPT2Tokenizer, AdamW
+from transformers import AdamW, GPT2LMHeadModel, GPT2Tokenizer
+
 
 class GradientAscent:
     def __init__(self, model_name="gpt2-medium"):
         self.tokenizer = GPT2Tokenizer.from_pretrained(model_name)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    
+
     def inverted_loss(self, logits, labels):
         """
         Define a loss function that rewards incorrect predictions.
@@ -23,8 +24,8 @@ class GradientAscent:
 
         optimizer = AdamW(model.parameters(), lr=learning_rate)
 
-        inputs = self.tokenizer(data['text'], return_tensors="pt").to(self.device)
-        labels = torch.tensor([self.tokenizer.encode(data['label'])]).to(self.device)
+        inputs = self.tokenizer(data["text"], return_tensors="pt").to(self.device)
+        labels = torch.tensor([self.tokenizer.encode(data["label"])]).to(self.device)
 
         for step in range(steps):
             optimizer.zero_grad()

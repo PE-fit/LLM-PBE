@@ -7,12 +7,16 @@
 
 import torch
 from datasets import load_dataset
-from transformers import AutoTokenizer, AutoModelForCausalLM, DataCollatorForLanguageModeling
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    DataCollatorForLanguageModeling,
+)
 
 # Load the dataset
 dataset = load_dataset("ag_news")
-print('Training data shape:', dataset['train'].shape)
-print('Eval data shape:', dataset['test'].shape)
+print("Training data shape:", dataset["train"].shape)
+print("Eval data shape:", dataset["test"].shape)
 
 BLOCK_SIZE = 128
 MODEL_CKPT = "gpt2"
@@ -21,8 +25,8 @@ MODEL_NAME = MODEL_CKPT.split("/")[-1] + "-clm-ag_news"
 set_seed = 42
 
 per_device_train_batch_size = 128
-# BATCH_SIZE = 1000 
-NUM_OF_EPOCHS = 1 # 3
+# BATCH_SIZE = 1000
+NUM_OF_EPOCHS = 1  # 3
 
 WEIGHT_DECAY = 0.01
 STRATEGY = "epoch"
@@ -34,15 +38,20 @@ DEVICE = torch.device("cuda")
 
 tokenizer = AutoTokenizer.from_pretrained(MODEL_CKPT, use_fast=True)
 
+
 def tokenizer_function(samples):
     return tokenizer(samples["text"])
 
-tokenized_ds = dataset.map(tokenizer_function, 
-                            batched=True,
-                            remove_columns=dataset["train"].column_names,)
+
+tokenized_ds = dataset.map(
+    tokenizer_function,
+    batched=True,
+    remove_columns=dataset["train"].column_names,
+)
 
 print(tokenized_ds["train"])
 print(tokenized_ds["test"])
+
 
 def group_texts(samples):
     concatenated_examples = {k: sum(samples[k], []) for k in samples.keys()}
@@ -55,6 +64,7 @@ def group_texts(samples):
     # result = samples
     # result["labels"] = result["input_ids"].copy()
     return result
+
 
 clm_ds = tokenized_ds.map(
     group_texts,
@@ -69,18 +79,22 @@ print(clm_ds["test"])
 
 model = (
     AutoModelForCausalLM.from_pretrained("DunnBC22/gpt2-Causal_Language_Model-AG_News")
-    ).to(DEVICE)
+).to(DEVICE)
 
 tokenizer.pad_token = tokenizer.eos_token
 data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
 
 import numpy as np
 from torch.utils.data import DataLoader
-
 from tqdm import tqdm
 
+
 def eval_model(set_name):
-    dl = DataLoader(clm_ds[set_name].select(list(range(1000))), batch_size=16, collate_fn=data_collator)
+    dl = DataLoader(
+        clm_ds[set_name].select(list(range(1000))),
+        batch_size=16,
+        collate_fn=data_collator,
+    )
 
     loss = 0
     total = 1
@@ -94,21 +108,25 @@ def eval_model(set_name):
         batch["labels"] = batch["input_ids"].clone()
         with torch.no_grad():
             outputs = model(**batch)
-        loss += outputs.loss.item() * len(batch['input_ids'])
-        total += len(batch['input_ids'])
+        loss += outputs.loss.item() * len(batch["input_ids"])
+        total += len(batch["input_ids"])
 
         # Get the logits
         logits = outputs.logits
         # move labels to correct device to enable model parallelism
-        labels = batch['labels'].to(logits.device)
+        labels = batch["labels"].to(logits.device)
         # Shift so that tokens < n predict n
         shift_logits = logits[..., :-1, :].contiguous()
         shift_labels = labels[..., 1:].contiguous()
         # Flatten the tokens
-        loss_fct = torch.nn.CrossEntropyLoss(reduction='none')
-        loss_per_token = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+        loss_fct = torch.nn.CrossEntropyLoss(reduction="none")
+        loss_per_token = loss_fct(
+            shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1)
+        )
 
-        loss_per_token = loss_per_token.view(batch['input_ids'].size(0), batch['input_ids'].size(1) - 1)
+        loss_per_token = loss_per_token.view(
+            batch["input_ids"].size(0), batch["input_ids"].size(1) - 1
+        )
 
         # attention_mask = batch['attention_mask'][..., 1:].contiguous()
         # sample_losses = torch.sum(sample_losses * attention_mask, dim=1) / torch.sum(attention_mask, dim=1)
@@ -119,10 +137,12 @@ def eval_model(set_name):
     print(np.mean(losses))
     return losses
 
-train_losses = eval_model('train')
-test_losses = eval_model('test')
+
+train_losses = eval_model("train")
+test_losses = eval_model("test")
 
 from sklearn.metrics import roc_auc_score
+
 losses = train_losses + test_losses
 members = [1] * len(train_losses) + [0] * len(test_losses)
 scores = [-l for l in losses]
@@ -144,7 +164,7 @@ print(f"FPR: {fpr[i]:.4f} | TPR: {tpr[i]:.4f}")
 
 fpr, tpr, threshold = roc_curve(members, scores)
 target_fpr = 0.01
-for i in range(len(fpr)-1, -1, -1):
+for i in range(len(fpr) - 1, -1, -1):
     if fpr[i] <= target_fpr:
         break
 print(f"FPR: {fpr[i]:.4f} | TPR: {tpr[i]:.4f}")

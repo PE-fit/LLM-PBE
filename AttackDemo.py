@@ -1,7 +1,7 @@
-from data import JailbreakQueries
-from models import TogetherAIModels
 from attacks import Jailbreak
+from data import JailbreakQueries
 from metrics import JailbreakRate
+from models import TogetherAIModels
 
 data = JailbreakQueries()
 # Fill api_key

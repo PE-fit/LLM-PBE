@@ -1,10 +1,13 @@
-from data.enron import EnronDataset
-from models.ft_clm import PeftCasualLM, FinetunedCasualLM
-from attacks.MIA.member_inference import MemberInferenceAttack, MIAMetric
-from transformers import BertForMaskedLM, BertTokenizer
 import argparse
-import wandb
 import os
+
+import wandb
+from transformers import BertForMaskedLM, BertTokenizer
+
+from attacks.MIA.member_inference import MemberInferenceAttack, MIAMetric
+from data.enron import EnronDataset
+from models.ft_clm import FinetunedCasualLM, PeftCasualLM
+
 
 def make_if_not_exist(p):
     if not os.path.exists(p):
@@ -12,12 +15,16 @@ def make_if_not_exist(p):
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--metric', default='perplexity', type=str)
-parser.add_argument('--num_sample', default=3000, type=int, help='use -1 to include all samples')
-parser.add_argument('--model', default='results/llama-2-7B-enron/checkpoint_451.tar.zst', type=str)
-parser.add_argument('--arch', default='daryl149/Llama-2-7b-chat-hf', type=str)
-parser.add_argument('--peft', default='lora', type=str)
-parser.add_argument('--max_seq_len', default=1024, type=int)
+parser.add_argument("--metric", default="perplexity", type=str)
+parser.add_argument(
+    "--num_sample", default=3000, type=int, help="use -1 to include all samples"
+)
+parser.add_argument(
+    "--model", default="results/llama-2-7B-enron/checkpoint_451.tar.zst", type=str
+)
+parser.add_argument("--arch", default="daryl149/Llama-2-7b-chat-hf", type=str)
+parser.add_argument("--peft", default="lora", type=str)
+parser.add_argument("--max_seq_len", default=1024, type=int)
 args = parser.parse_args()
 
 llm = PeftCasualLM(model_path=args.model, arch=args.arch, max_seq_len=args.max_seq_len)

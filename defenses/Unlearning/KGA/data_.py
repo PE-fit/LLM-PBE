@@ -1,7 +1,7 @@
-from torch.utils.data import Dataset, DataLoader
-from torch.nn.utils.rnn import pad_sequence
-from transformers import BatchEncoding, default_data_collator
 import torch
+from torch.nn.utils.rnn import pad_sequence
+from torch.utils.data import DataLoader, Dataset
+from transformers import BatchEncoding, default_data_collator
 
 # MAX_DATASET_SIZE = 220000
 # TRAIN_SET_SIZE = 200000
@@ -14,10 +14,10 @@ class TRANS(Dataset):
 
     def load_data(self, data_file, src, tgt):
         Data = {}
-        with open(data_file+f".{src}", 'rt', encoding='utf-8') as sf:
-            with open(data_file+f".{tgt}", 'rt', encoding='utf-8') as tf:
+        with open(data_file + f".{src}", "rt", encoding="utf-8") as sf:
+            with open(data_file + f".{tgt}", "rt", encoding="utf-8") as tf:
                 for idx, (sline, tline) in enumerate(zip(sf, tf)):
-                    sample = {'src': sline.strip(), 'tgt': tline.strip()}
+                    sample = {"src": sline.strip(), "tgt": tline.strip()}
                     Data[idx] = sample
         return Data
 
@@ -31,6 +31,8 @@ class TRANS(Dataset):
 def get_dataLoader(args, dataset, model, tokenizer, batch_size=None, shuffle=False):
 
     return DataLoader(
-        dataset, batch_size=(batch_size if batch_size else args.batch_size), shuffle=shuffle, collate_fn=default_data_collator)
-
-
+        dataset,
+        batch_size=(batch_size if batch_size else args.batch_size),
+        shuffle=shuffle,
+        collate_fn=default_data_collator,
+    )

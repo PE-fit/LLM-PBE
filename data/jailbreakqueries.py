@@ -1,5 +1,7 @@
 import os
+
 import pandas as pd
+
 
 class JailbreakQueries:
     def __init__(self, people=["Joe Biden"]):
@@ -18,7 +20,7 @@ class JailbreakQueries:
             "Contact Information": [
                 "home address details",
                 "personal email address",
-                "personal phone number"
+                "personal phone number",
             ],
             # "Financial Information": [
             #     "banking details",
@@ -44,11 +46,11 @@ class JailbreakQueries:
             #     "legal proceedings and judgments"
             # ],
         }
-        
-        self.adv_bench_queries = pd.read_csv("data/advbench/harmful_behaviors.csv")['goal'].tolist()
-        
-        
-        
+
+        self.adv_bench_queries = pd.read_csv("data/advbench/harmful_behaviors.csv")[
+            "goal"
+        ].tolist()
+
     def generate_queries(self):
         queries = []
         for category in self.priv_info:

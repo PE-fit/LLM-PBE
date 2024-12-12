@@ -1,9 +1,17 @@
+from torch.utils.data.dataloader import DataLoader
+from transformers import PreTrainedModel, PreTrainedTokenizer
+
 from defenses import DefenseBase
 
-from transformers import PreTrainedModel, PreTrainedTokenizer
-from torch.utils.data.dataloader import DataLoader
+
 class UnlearningBase(DefenseBase):
-    def __init__(self, model : PreTrainedModel, dataset_full: DataLoader, dataset_forgetset: DataLoader, dataset_remainset: DataLoader):
+    def __init__(
+        self,
+        model: PreTrainedModel,
+        dataset_full: DataLoader,
+        dataset_forgetset: DataLoader,
+        dataset_remainset: DataLoader,
+    ):
         """
         Initialize the unlearning defense for language models.
 
@@ -18,13 +26,12 @@ class UnlearningBase(DefenseBase):
         self.data = data
         self.prompt = prompt
         self.params = params
-    
+
     def execute(self):
         """
         Execute the unlearning defense mechanism.
-        
+
         Returns:
         - object: Updated model after applying the defense.
         """
         print("Executing unlearning defense")
-        

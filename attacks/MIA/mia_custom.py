@@ -5,40 +5,38 @@
 #   TypeError: can only concatenate str (not "int") to str
 # Update datasets to v2.14.6
 
-import argparse
-import os
-from datetime import datetime
-
 import torch
+import json
+from dotenv import load_dotenv
+from argparse import ArgumentParser, Namespace
 from datasets import load_dataset
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
-    BertForMaskedLM,
-    BertTokenizer,
     DataCollatorForLanguageModeling,
 )
-from utils import get_neighborhood_score
 
-parser = argparse.ArgumentParser()
-parser.add_argument("--length", type=int, default=64)
-parser.add_argument("--num_iters", type=int, default=1_000)
-args = parser.parse_args()
+load_dotenv()
 
-now = datetime.now()
-root = os.path.join("experiments", now.strftime("%m_%d_%Y"), now.strftime("%H_%M_%S"))
-if not os.path.isdir(root):
-    os.makedirs(root)
+parser: ArgumentParser = ArgumentParser(description="Tool used for running mia attacks on fine-tuned dataset")
+parser.add_argument("--dataset", required=True, type=str, help="Dataset name to be used for the MIA. Supports currently datasets from huggingface only")
+parser.add_argument("--model-name", required=True, type=str, help="Model name or path." )
+parser.add_argument("--block-size", required=False, type=int, default=128,  help="Block size of the." )
+
+
+args: Namespace = parser.parse_args()
+
 
 # Load the dataset
-dataset = load_dataset("ag_news")
+dataset = load_dataset(args.dataset)
 print("Training data shape:", dataset["train"].shape)
 print("Eval data shape:", dataset["test"].shape)
 
-BLOCK_SIZE = 128
-MODEL_CKPT = "gpt2"
+BLOCK_SIZE = args.block_size
+# MODEL_CKPT = "gpt2"
 
-MODEL_NAME = MODEL_CKPT.split("/")[-1] + "-clm-ag_news"
+# MODEL_NAME = MODEL_CKPT.split("/")[-1] + "-clm-ag_news"
+MODEL_NAME = args.model_name
 set_seed = 42
 
 per_device_train_batch_size = 128
@@ -53,14 +51,11 @@ LEARNING_RATE = 2e-5
 
 DEVICE = torch.device("cuda")
 
-tokenizer = AutoTokenizer.from_pretrained(MODEL_CKPT, use_fast=True)
+tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, use_fast=True)
 
 
 def tokenizer_function(samples):
-    return tokenizer(samples["text"], truncation=True)
-    return tokenizer(
-        samples["text"], truncation=True, max_length=args.length
-    )  # [NEW] For testing different sequence lengths
+    return tokenizer(samples["text"])
 
 
 tokenized_ds = dataset.map(
@@ -98,17 +93,11 @@ print(clm_ds["train"])
 print(clm_ds["test"])
 
 model = (
-    AutoModelForCausalLM.from_pretrained("DunnBC22/gpt2-Causal_Language_Model-AG_News")
+    AutoModelForCausalLM.from_pretrained(MODEL_NAME)
 ).to(DEVICE)
-model.is_causal = True  # [NEW] Necessary for util.generate_neighbors to work
 
 tokenizer.pad_token = tokenizer.eos_token
 data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
-
-# [NEW] Load reference model to search for token replacements
-search_tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
-search_model = BertForMaskedLM.from_pretrained("bert-base-uncased").to(DEVICE)
-search_embedder = search_model.bert.embeddings
 
 import numpy as np
 from torch.utils.data import DataLoader
@@ -117,7 +106,7 @@ from tqdm import tqdm
 
 def eval_model(set_name):
     dl = DataLoader(
-        clm_ds[set_name].select(list(range(args.num_iters))),
+        clm_ds[set_name].select(list(range(1000))),
         batch_size=16,
         collate_fn=data_collator,
     )
@@ -126,7 +115,6 @@ def eval_model(set_name):
     total = 1
     model.eval()
     losses = []
-    nscores = []
     for batch in tqdm(dl):
         # batch = {k: torch.stack(v).to(DEVICE) for k, v in batch.items()}
         # if tokenizer.pad_token_id is not None:
@@ -160,40 +148,13 @@ def eval_model(set_name):
         sample_losses = loss_per_token.mean(1)
 
         losses.extend(sample_losses.cpu().numpy())
-
-        # [NEW] Calculate neighbor scores
-        decoded_texts = tokenizer.batch_decode(batch["input_ids"])
-        for i in range(len(decoded_texts)):
-            nscore, _ = get_neighborhood_score(
-                decoded_texts[i],
-                batch["labels"][i],
-                tokenizer,
-                model,
-                search_tokenizer,
-                search_model,
-                search_embedder,
-            )
-            nscores.append(nscore)
-    return losses, nscores
+    print(loss / total)
+    print(np.mean(losses))
+    return losses
 
 
-# Evaluate model on train and test sets, save data to disk
-train_losses, train_nscores = eval_model("train")
-np.save(os.path.join(root, "train_losses.npy"), np.array(train_losses))
-np.save(os.path.join(root, "train_nscores.npy"), np.array(train_nscores))
-
-test_losses, test_nscores = eval_model("test")
-np.save(os.path.join(root, "test_losses.npy"), np.array(test_losses))
-np.save(os.path.join(root, "test_nscores.npy"), np.array(test_nscores))
-
-# [NEW] Load data and evaluate AUC
-# train_losses = np.load(os.path.join(root, 'train_losses.npy')).tolist()
-# test_losses = np.load(os.path.join(root, 'test_losses.npy')).tolist()
-
-train_losses = np.load(os.path.join(root, "train_nscores.npy"))
-train_losses = (-train_losses).tolist()
-test_losses = np.load(os.path.join(root, "test_nscores.npy"))
-test_losses = (-test_losses).tolist()
+train_losses = eval_model("train")
+test_losses = eval_model("test")
 
 from sklearn.metrics import roc_auc_score
 
@@ -222,3 +183,7 @@ for i in range(len(fpr) - 1, -1, -1):
     if fpr[i] <= target_fpr:
         break
 print(f"FPR: {fpr[i]:.4f} | TPR: {tpr[i]:.4f}")
+
+
+result: dict = dict(mia_auc=mia_auc, accuracy=np.mean(corrects),fpr=f"{fpr[i]:.4f}",tpr=f"{tpr[i]:.4f}" )
+print(result)

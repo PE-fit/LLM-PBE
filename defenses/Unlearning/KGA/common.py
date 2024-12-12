@@ -1,7 +1,9 @@
 import os
-import torch
 import random
+
 import numpy as np
+import torch
+
 
 # Preprocessing the ids
 def load_ids(filename: str):
@@ -9,14 +11,16 @@ def load_ids(filename: str):
         ids = [int(line.strip()) for line in f.readlines()]
     return ids
 
+
 def seed_everything(seed=1029):
     random.seed(seed)
-    os.environ['PYTHONHASHSEED'] = str(seed)
+    os.environ["PYTHONHASHSEED"] = str(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.deterministic = True
+
 
 # def metric_evaluate(args, dataset, model, tokenizer):
 #     dataloader = get_dataLoader(args, dataset, model, tokenizer, shuffle=False)
@@ -26,7 +30,7 @@ def seed_everything(seed=1029):
 #     preds, labels = [], []
 #     model.eval()
 #     with torch.no_grad():
-#         for batch_data in dataloader:  
+#         for batch_data in dataloader:
 #             batch_data = batch_data.to(args.device)
 #             output = model(**batch_data)
 #             ppl.append(math.exp(output.loss.item()))
@@ -64,7 +68,7 @@ def seed_everything(seed=1029):
 #     base_model.eval()
 #     unlearn_model.eval()
 #     with torch.no_grad():
-#         for batch_data in dataloader:  
+#         for batch_data in dataloader:
 #             batch_data = batch_data.to(args.device)
 #             output1 = base_model(**batch_data)
 #             ppl1 = math.exp(output1.loss.item())
@@ -83,11 +87,9 @@ def seed_everything(seed=1029):
 #     logger.info(f'PPL Diff3: {ppl_dif3:0.4f}')
 
 
-
-
 class InverseSquareRootSchedule(object):
-    """From Fairseq
-    """
+    """From Fairseq"""
+
     def __init__(self, warmup_init_lr, warmup_updates, lr, optimizer):
         super().__init__()
 
@@ -102,7 +104,7 @@ class InverseSquareRootSchedule(object):
         self.lr_step = (warmup_end_lr - warmup_init_lr) / warmup_updates
 
         # then, decay prop. to the inverse square root of the update number
-        self.decay_factor = warmup_end_lr * warmup_updates ** 0.5
+        self.decay_factor = warmup_end_lr * warmup_updates**0.5
 
         # initial learning rate
         self.lr = warmup_init_lr
@@ -120,7 +122,6 @@ class InverseSquareRootSchedule(object):
         if num_updates < self.warmup_updates:
             self.lr = self.warmup_init_lr + num_updates * self.lr_step
         else:
-            self.lr = self.decay_factor * num_updates ** -0.5
+            self.lr = self.decay_factor * num_updates**-0.5
         self.set_lr(self.lr)
         return self.lr
-

@@ -3,25 +3,44 @@
 # python train_gpt2_agnews.py
 #  @GPU9 https://wandb.ai/jyhong/huggingface/runs/7l9arc11
 
-import math
-import torch
 import argparse
+import math
+
 import numpy as np
-from tqdm import trange
-from datasets import load_dataset, concatenate_datasets
-from transformers import AutoTokenizer, AutoModelForCausalLM, DataCollatorForLanguageModeling, BertTokenizer, BertForMaskedLM
-from transformers import TrainerControl, TrainerState, TrainingArguments, Trainer, set_seed, TrainerCallback
-from utils import get_neighborhood_score, get_loss
-from sklearn.metrics import roc_auc_score
+import torch
 import wandb
+from datasets import concatenate_datasets, load_dataset
+from sklearn.metrics import roc_auc_score
+from tqdm import trange
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    BertForMaskedLM,
+    BertTokenizer,
+    DataCollatorForLanguageModeling,
+    Trainer,
+    TrainerCallback,
+    TrainerControl,
+    TrainerState,
+    TrainingArguments,
+    set_seed,
+)
+from utils import get_loss, get_neighborhood_score
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--max_length', default=128, type=int)
-parser.add_argument('--epochs', default=20, type=int)
-parser.add_argument('--lr', default=2e-5, type=float)
-parser.add_argument('--test_size', default=-1, type=float, help='ratio of test set. If -1 (default) is provided, use the default split.')
-parser.add_argument('--eval_steps', default=100, type=int)
-parser.add_argument('--mia_type', default='loss', choices=['loss', 'neighbor', 'lira'], type=str)
+parser.add_argument("--max_length", default=128, type=int)
+parser.add_argument("--epochs", default=20, type=int)
+parser.add_argument("--lr", default=2e-5, type=float)
+parser.add_argument(
+    "--test_size",
+    default=-1,
+    type=float,
+    help="ratio of test set. If -1 (default) is provided, use the default split.",
+)
+parser.add_argument("--eval_steps", default=100, type=int)
+parser.add_argument(
+    "--mia_type", default="loss", choices=["loss", "neighbor", "lira"], type=str
+)
 args = parser.parse_args()
 
 seed = 42
@@ -31,27 +50,43 @@ set_seed(seed)
 dataset = load_dataset("ag_news")
 if args.test_size > 0:
     # dataset = concatenate_datasets([dataset['train'], dataset['test']])
-    dataset = dataset['train'].train_test_split(args.test_size, seed=seed)
-print('Training data shape:', dataset['train'].shape)
-print('Eval data shape:', dataset['test'].shape)
+    dataset = dataset["train"].train_test_split(args.test_size, seed=seed)
+print("Training data shape:", dataset["train"].shape)
+print("Eval data shape:", dataset["test"].shape)
 
 
 # [NEW] Callback to calculate AUC from Neighborhood-MIA attack
 def eval(name, num_iters, max_length, causal):
     scores = []
     iterator = iter(dataset.shuffle()[name])
-    for _ in trange(num_iters, desc=f'{name} mia'):
+    for _ in trange(num_iters, desc=f"{name} mia"):
         data = next(iterator)
-        text = data['text']
-        label = data['label']
+        text = data["text"]
+        label = data["label"]
         with torch.no_grad():
-            if args.mia_type == 'loss':
-                score = get_loss(text, label, tokenizer, model, max_length, causal=causal)
-            elif args.mia_type == 'neighbor':
-                score = get_neighborhood_score(text, label, tokenizer, model, search_tokenizer, search_model, search_embedder, max_length, causal=causal)
-            elif args.mia_type == 'lira':
-                loss = get_loss(text, label, tokenizer, model, max_length, causal=causal)
-                ref_loss = get_loss(text, label, tokenizer, ref_model, max_length, causal=causal)
+            if args.mia_type == "loss":
+                score = get_loss(
+                    text, label, tokenizer, model, max_length, causal=causal
+                )
+            elif args.mia_type == "neighbor":
+                score = get_neighborhood_score(
+                    text,
+                    label,
+                    tokenizer,
+                    model,
+                    search_tokenizer,
+                    search_model,
+                    search_embedder,
+                    max_length,
+                    causal=causal,
+                )
+            elif args.mia_type == "lira":
+                loss = get_loss(
+                    text, label, tokenizer, model, max_length, causal=causal
+                )
+                ref_loss = get_loss(
+                    text, label, tokenizer, ref_model, max_length, causal=causal
+                )
                 score = loss - ref_loss
         scores.append(score)
     return scores
@@ -63,13 +98,19 @@ class MIACallback(TrainerCallback):
         self.num_iters = num_iters
         self.max_length = max_length
         self.eval_steps = eval_steps
-    
-    def on_step_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+
+    def on_step_end(
+        self,
+        args: TrainingArguments,
+        state: TrainerState,
+        control: TrainerControl,
+        **kwargs,
+    ):
         if state.global_step % self.eval_steps != 0:
             return
-        
-        train_scores = eval('train', self.num_iters, self.max_length, True)
-        test_scores = eval('test', self.num_iters, self.max_length, True)
+
+        train_scores = eval("train", self.num_iters, self.max_length, True)
+        test_scores = eval("test", self.num_iters, self.max_length, True)
 
         ones = np.ones_like(test_scores)
         zeros = np.zeros_like(train_scores)
@@ -77,8 +118,8 @@ class MIACallback(TrainerCallback):
         y_score = np.concatenate([test_scores, train_scores])
         y_true = np.concatenate([ones, zeros])
         auc = roc_auc_score(y_true, y_score)
-        print('AUC:', roc_auc_score(y_true, y_score))
-        wandb.log({'mia auc': auc}, commit=False)
+        print("AUC:", roc_auc_score(y_true, y_score))
+        wandb.log({"mia auc": auc}, commit=False)
 
 
 MODEL_CKPT = "gpt2"
@@ -91,7 +132,7 @@ if args.test_size > 0:
 
 per_device_train_batch_size = 128
 
-WEIGHT_DECAY = 0.  #  0.01
+WEIGHT_DECAY = 0.0  #  0.01
 # STRATEGY = "epoch"
 STRATEGY = "steps"
 
@@ -103,26 +144,30 @@ DEVICE = torch.device("cuda")
 mia_callback = MIACallback(1_000, args.max_length, args.eval_steps)
 
 # [NEW] BERT reference model for neighborhood MIA attack
-search_tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-search_model = BertForMaskedLM.from_pretrained('bert-base-uncased').to(DEVICE)
+search_tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+search_model = BertForMaskedLM.from_pretrained("bert-base-uncased").to(DEVICE)
 search_embedder = search_model.bert.embeddings
 
 tokenizer = AutoTokenizer.from_pretrained(MODEL_CKPT, use_fast=True)
 
+
 def tokenizer_function(samples):
     return tokenizer(samples["text"], truncation=True, max_length=args.max_length)
 
-tokenized_ds = dataset.map(tokenizer_function, 
-                            batched=True,
-                            remove_columns=dataset["train"].column_names,)
+
+tokenized_ds = dataset.map(
+    tokenizer_function,
+    batched=True,
+    remove_columns=dataset["train"].column_names,
+)
 
 print(tokenized_ds["train"])
 print(tokenized_ds["test"])
 
 clm_ds = tokenized_ds
 
-model = AutoModelForCausalLM.from_pretrained(MODEL_CKPT, device_map='auto')
-ref_model = AutoModelForCausalLM.from_pretrained(MODEL_CKPT, device_map='auto')
+model = AutoModelForCausalLM.from_pretrained(MODEL_CKPT, device_map="auto")
+ref_model = AutoModelForCausalLM.from_pretrained(MODEL_CKPT, device_map="auto")
 
 targs = TrainingArguments(
     output_dir=MODEL_NAME,
@@ -149,7 +194,7 @@ trainer = Trainer(
     train_dataset=clm_ds["train"],
     eval_dataset=clm_ds["test"],
     data_collator=data_collator,
-    callbacks=[mia_callback]
+    callbacks=[mia_callback],
 )
 
 train_results = trainer.train()
@@ -158,8 +203,6 @@ trainer.save_model(MODEL_NAME)
 
 evaluation_results = trainer.evaluate()
 print(f"Perplexity: {math.exp(evaluation_results['eval_loss']):.2f}")
-
-
 
 
 # model = (

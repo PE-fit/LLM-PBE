@@ -2,7 +2,7 @@ class DefenseBase:
     def __init__(self, model, data, prompt, params):
         """
         Initialize the base class for defenses on language models.
-        
+
         Parameters:
         - model (object): The language model object to be defended.
         - data (list/dataset): The data that will be used to apply the defense.

@@ -1,6 +1,7 @@
 """Integration of KGA Unlearn.
 
 """
+
 import json
 import logging
 import math
@@ -8,7 +9,7 @@ import os
 import random
 from itertools import chain
 from typing import Union
-from .common import load_ids
+
 import datasets
 import torch
 import transformers
@@ -17,23 +18,37 @@ from accelerate.logging import get_logger
 from accelerate.utils import set_seed
 from datasets import Dataset, DatasetDict, load_dataset
 from huggingface_hub import Repository, create_repo
-from peft import (PeftType, PromptTuningConfig, PromptTuningInit, TaskType,
-                  get_peft_model)
+from peft import (
+    PeftType,
+    PromptTuningConfig,
+    PromptTuningInit,
+    TaskType,
+    get_peft_model,
+)
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
-from transformers import (MODEL_MAPPING, AutoConfig, AutoModelForCausalLM,
-                          AutoTokenizer, PreTrainedModel, SchedulerType,
-                          default_data_collator, get_scheduler)
+from transformers import (
+    MODEL_MAPPING,
+    AutoConfig,
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    PreTrainedModel,
+    SchedulerType,
+    default_data_collator,
+    get_scheduler,
+)
 from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
 
 from data.echr import EchrDataset
 from defenses.Unlearning import UnlearningBase
 
+from .common import load_ids
+
 logger = get_logger(__name__)
 require_version(
     "datasets>=1.8.0",
-    "To fix: pip install -r examples/pytorch/language-modeling/requirements.txt"
+    "To fix: pip install -r examples/pytorch/language-modeling/requirements.txt",
 )
 
 MODEL_CONFIG_CLASSES = list(MODEL_MAPPING.keys())
@@ -49,8 +64,8 @@ class KGAUnlearn(UnlearningBase):
         model_n: PreTrainedModel,
         file_forget_ids: str,
         file_assist_ids: str,
-        checkpoint:str = "meta-llama/Llama-2-7b-chat-hf",
-        output_dir:str = "kga_unlearned",
+        checkpoint: str = "meta-llama/Llama-2-7b-chat-hf",
+        output_dir: str = "kga_unlearned",
     ):
         """
         Args:
@@ -69,7 +84,8 @@ class KGAUnlearn(UnlearningBase):
         self.file_assist_ids = file_assist_ids
 
     def execute(self):
-        os.system(f"""accelerate launch kga_generation.py \
+        os.system(
+            f"""accelerate launch kga_generation.py \
     --output_dir {self.output_dir} \
     --new_model_dir {self.model_n} \
     --forget_model_dir {self.model_f} \
@@ -88,25 +104,36 @@ class KGAUnlearn(UnlearningBase):
     --warmup_steps 1000 \
     --weight_decay 0.0001 \
     --lr_schedule inverse_sqrt \
-    --beam 5 | tee -a unlearn_kga.log""")
+    --beam 5 | tee -a unlearn_kga.log"""
+        )
+
 
 """
 Only use this help for training A_f and A_n.
 
 (as defined in paper, we need to train A_f and A_n on D_f and D_n respectively.)
 """
+
+
 class KGAHelper:
 
-    def __init__(self, config: AutoConfig, model: PreTrainedModel, tokenizer: AutoTokenizer, raw_datasets: Union[DatasetDict, Dataset], checkpoint: str):
+    def __init__(
+        self,
+        config: AutoConfig,
+        model: PreTrainedModel,
+        tokenizer: AutoTokenizer,
+        raw_datasets: Union[DatasetDict, Dataset],
+        checkpoint: str,
+    ):
         self.config = config
         self.model = model
         self.tokenizer = tokenizer
         self.raw_datasets = raw_datasets
         self.checkpoint = checkpoint
 
-    def train_model_n(self,
-                      file_assist_ids: str,
-                      num_train_epochs: int) -> PreTrainedModel:
+    def train_model_n(
+        self, file_assist_ids: str, num_train_epochs: int
+    ) -> PreTrainedModel:
         # Train model on new set. (The Dn dataset, a small set of extra data Dn, where Dn ∩ D = ∅) to assist the unlearning process.
         self.train(
             checkpoint=self.checkpoint,
@@ -119,9 +146,9 @@ class KGAHelper:
             output_dir="kga_output_n",
         )
 
-    def train_model_f(self,
-                      file_forget_ids: str,
-                      num_train_epochs: int) -> PreTrainedModel:
+    def train_model_f(
+        self, file_forget_ids: str, num_train_epochs: int
+    ) -> PreTrainedModel:
         # Train model on forget set
         self.train(
             checkpoint=self.checkpoint,
@@ -134,29 +161,31 @@ class KGAHelper:
             output_dir="kga_output_f",
         )
 
-    def train(self,
-              model: AutoModelForCausalLM,
-              config: AutoConfig,
-              tokenizer: AutoTokenizer,
-              raw_datasets: Union[DatasetDict, Dataset],
-              file_assist_ids: str,
-              output_dir: str = None,
-              checkpoint: str = None,
-              seed: int = None,
-              num_train_epochs: int = 50,
-              block_size: int = 512,
-              gradient_accumulation_steps: int = 1,
-              max_train_steps: int = None,
-              num_warmup_steps: int = 0,
-              per_device_eval_batch_size: int = 4,
-              per_device_train_batch_size: int = 4,
-              preprocessing_num_workers: int = 8,
-              overwrite_cache: bool = False,
-              checkpointing_steps: int = 500,
-              resume_from_checkpoint: str = None,
-              lr_scheduler_type: str = "linear",
-              learning_rate: float = 5e-5,
-              weight_decay: float = 0.0) -> PreTrainedModel:
+    def train(
+        self,
+        model: AutoModelForCausalLM,
+        config: AutoConfig,
+        tokenizer: AutoTokenizer,
+        raw_datasets: Union[DatasetDict, Dataset],
+        file_assist_ids: str,
+        output_dir: str = None,
+        checkpoint: str = None,
+        seed: int = None,
+        num_train_epochs: int = 50,
+        block_size: int = 512,
+        gradient_accumulation_steps: int = 1,
+        max_train_steps: int = None,
+        num_warmup_steps: int = 0,
+        per_device_eval_batch_size: int = 4,
+        per_device_train_batch_size: int = 4,
+        preprocessing_num_workers: int = 8,
+        overwrite_cache: bool = False,
+        checkpointing_steps: int = 500,
+        resume_from_checkpoint: str = None,
+        lr_scheduler_type: str = "linear",
+        learning_rate: float = 5e-5,
+        weight_decay: float = 0.0,
+    ) -> PreTrainedModel:
         """
 
         Args:
@@ -164,7 +193,13 @@ class KGAHelper:
 
         """
         assert lr_scheduler_type in [
-            "linear", "cosine", "cosine_with_restarts", "polynomial", "constant", "constant_with_warmup"]
+            "linear",
+            "cosine",
+            "cosine_with_restarts",
+            "polynomial",
+            "constant",
+            "constant_with_warmup",
+        ]
 
         # Training on the Dn dataset (a small set of extra data Dn, where Dn ∩ D = ∅) to assist the unlearning process.
 
@@ -173,8 +208,9 @@ class KGAHelper:
         # in the environment
         accelerator_log_kwargs = {}
 
-        accelerator = Accelerator(gradient_accumulation_steps=1,
-                                  **accelerator_log_kwargs)
+        accelerator = Accelerator(
+            gradient_accumulation_steps=1, **accelerator_log_kwargs
+        )
 
         # Make one log on every process with the configuration for debugging.
         logging.basicConfig(
@@ -232,8 +268,6 @@ class KGAHelper:
         column_names = raw_datasets["train"].column_names
         text_column_name = "text" if "text" in column_names else column_names[0]
 
-
-
         train_ids = load_ids(file_assist_ids)
         raw_datasets["train"] = raw_datasets["train"].select(train_ids)
 
@@ -273,8 +307,7 @@ class KGAHelper:
         def group_texts(examples):
             # Concatenate all texts.
             concatenated_examples = {
-                k: list(chain(*examples[k]))
-                for k in examples.keys()
+                k: list(chain(*examples[k])) for k in examples.keys()
             }
             total_length = len(concatenated_examples[list(examples.keys())[0]])
             # We drop the small remainder, and if the total_length < block_size  we exclude this batch and return an empty dict.
@@ -282,10 +315,7 @@ class KGAHelper:
             total_length = (total_length // block_size) * block_size
             # Split by chunks of max_len.
             result = {
-                k: [
-                    t[i:i + block_size]
-                    for i in range(0, total_length, block_size)
-                ]
+                k: [t[i : i + block_size] for i in range(0, total_length, block_size)]
                 for k, t in concatenated_examples.items()
             }
             result["labels"] = result["input_ids"].copy()
@@ -312,19 +342,20 @@ class KGAHelper:
 
         # Log a few random samples from the training set:
         for index in random.sample(range(len(train_dataset)), 3):
-            logger.info(
-                f"Sample {index} of the training set: {train_dataset[index]}.")
+            logger.info(f"Sample {index} of the training set: {train_dataset[index]}.")
 
         # DataLoaders creation:
         train_dataloader = DataLoader(
             train_dataset,
             shuffle=True,
             collate_fn=default_data_collator,
-            batch_size=per_device_train_batch_size)
+            batch_size=per_device_train_batch_size,
+        )
         eval_dataloader = DataLoader(
             eval_dataset,
             collate_fn=default_data_collator,
-            batch_size=per_device_eval_batch_size)
+            batch_size=per_device_eval_batch_size,
+        )
 
         # Optimizer
         # Split weights in two groups, one with weight decay and the other not.
@@ -332,28 +363,28 @@ class KGAHelper:
         optimizer_grouped_parameters = [
             {
                 "params": [
-                    p for n, p in model.named_parameters()
+                    p
+                    for n, p in model.named_parameters()
                     if not any(nd in n for nd in no_decay)
                 ],
-                "weight_decay":
-                weight_decay,
+                "weight_decay": weight_decay,
             },
             {
                 "params": [
-                    p for n, p in model.named_parameters()
+                    p
+                    for n, p in model.named_parameters()
                     if any(nd in n for nd in no_decay)
                 ],
-                "weight_decay":
-                0.0,
+                "weight_decay": 0.0,
             },
         ]
-        optimizer = torch.optim.AdamW(
-            optimizer_grouped_parameters, lr=learning_rate)
+        optimizer = torch.optim.AdamW(optimizer_grouped_parameters, lr=learning_rate)
 
         # Scheduler and math around the number of training steps.
         overrode_max_train_steps = False
         num_update_steps_per_epoch = math.ceil(
-            len(train_dataloader) / gradient_accumulation_steps)
+            len(train_dataloader) / gradient_accumulation_steps
+        )
         if max_train_steps is None:
             max_train_steps = num_train_epochs * num_update_steps_per_epoch
             overrode_max_train_steps = True
@@ -362,13 +393,15 @@ class KGAHelper:
             name=lr_scheduler_type,
             optimizer=optimizer,
             num_warmup_steps=num_warmup_steps * gradient_accumulation_steps,
-            num_training_steps=max_train_steps *
-            gradient_accumulation_steps,
+            num_training_steps=max_train_steps * gradient_accumulation_steps,
         )
 
         # Prepare everything with our `accelerator`.
-        model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
-            model, optimizer, train_dataloader, eval_dataloader, lr_scheduler)
+        model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = (
+            accelerator.prepare(
+                model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
+            )
+        )
 
         # On TPU, the tie weights in our model have been disconnected, so we need to restore the ties.
         if accelerator.distributed_type == DistributedType.TPU:
@@ -376,16 +409,19 @@ class KGAHelper:
 
         # We need to recalculate our total training steps as the size of the training dataloader may have changed.
         num_update_steps_per_epoch = math.ceil(
-            len(train_dataloader) / gradient_accumulation_steps)
+            len(train_dataloader) / gradient_accumulation_steps
+        )
         if overrode_max_train_steps:
             max_train_steps = num_train_epochs * num_update_steps_per_epoch
         # Afterwards we recalculate our number of training epochs
-        num_train_epochs = math.ceil(max_train_steps /
-                                     num_update_steps_per_epoch)
+        num_train_epochs = math.ceil(max_train_steps / num_update_steps_per_epoch)
 
         # Train!
-        total_batch_size = per_device_train_batch_size * \
-            accelerator.num_processes * gradient_accumulation_steps
+        total_batch_size = (
+            per_device_train_batch_size
+            * accelerator.num_processes
+            * gradient_accumulation_steps
+        )
 
         logger.info("***** Running training *****")
         logger.info(f"  Num examples = {len(train_dataset)}")
@@ -396,13 +432,12 @@ class KGAHelper:
         logger.info(
             f"  Total train batch size (w. parallel, distributed & accumulation) = {total_batch_size}"
         )
-        logger.info(
-            f"  Gradient Accumulation steps = {gradient_accumulation_steps}"
-        )
+        logger.info(f"  Gradient Accumulation steps = {gradient_accumulation_steps}")
         logger.info(f"  Total optimization steps = {max_train_steps}")
         # Only show the progress bar once on each machine.
-        progress_bar = tqdm(range(max_train_steps),
-                            disable=not accelerator.is_local_main_process)
+        progress_bar = tqdm(
+            range(max_train_steps), disable=not accelerator.is_local_main_process
+        )
         completed_steps = 0
         starting_epoch = 0
 
@@ -426,14 +461,15 @@ class KGAHelper:
             training_difference = os.path.splitext(path)[0]
 
             if "epoch" in training_difference:
-                starting_epoch = int(
-                    training_difference.replace("epoch_", "")) + 1
+                starting_epoch = int(training_difference.replace("epoch_", "")) + 1
                 resume_step = None
                 completed_steps = starting_epoch * num_update_steps_per_epoch
             else:
                 # need to multiply `gradient_accumulation_steps` to reflect real steps
-                resume_step = int(training_difference.replace(
-                    "step_", "")) * gradient_accumulation_steps
+                resume_step = (
+                    int(training_difference.replace("step_", ""))
+                    * gradient_accumulation_steps
+                )
                 starting_epoch = resume_step // len(train_dataloader)
                 completed_steps = resume_step // gradient_accumulation_steps
                 resume_step -= starting_epoch * len(train_dataloader)
@@ -444,14 +480,20 @@ class KGAHelper:
         for epoch in range(starting_epoch, num_train_epochs):
             model.train()
 
-            if resume_from_checkpoint and epoch == starting_epoch and resume_step is not None:
+            if (
+                resume_from_checkpoint
+                and epoch == starting_epoch
+                and resume_step is not None
+            ):
                 # We skip the first `n` batches in the dataloader when resuming from a checkpoint
                 active_dataloader = accelerator.skip_first_batches(
-                    train_dataloader, resume_step)
+                    train_dataloader, resume_step
+                )
             else:
                 active_dataloader = train_dataloader
             for step, batch in enumerate(
-                    tqdm(active_dataloader, desc=f"Training epoch {epoch}")):
+                tqdm(active_dataloader, desc=f"Training epoch {epoch}")
+            ):
                 # print("Accumulate step:", step)
                 with accelerator.accumulate(model):
                     outputs = model(**batch)
@@ -478,14 +520,17 @@ class KGAHelper:
             model.eval()
             losses = []
             for step, batch in enumerate(
-                    tqdm(eval_dataloader, desc=f"Evaluating epoch {epoch}")):
+                tqdm(eval_dataloader, desc=f"Evaluating epoch {epoch}")
+            ):
                 with torch.no_grad():
                     outputs = model(**batch)
 
                 loss = outputs.loss
                 losses.append(
                     accelerator.gather_for_metrics(
-                        loss.repeat(per_device_eval_batch_size)))
+                        loss.repeat(per_device_eval_batch_size)
+                    )
+                )
 
             losses = torch.cat(losses)
             try:
@@ -508,8 +553,11 @@ class KGAHelper:
         unwrapped_model.save_pretrained(
             output_dir,
             is_main_process=accelerator.is_main_process,
-            save_function=accelerator.save)
+            save_function=accelerator.save,
+        )
         if accelerator.is_main_process:
             tokenizer.save_pretrained(output_dir)
-            with open(os.path.join(output_dir, "all_results.json"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(output_dir, "all_results.json"), "w", encoding="utf-8"
+            ) as f:
                 json.dump({"perplexity": perplexity}, f)

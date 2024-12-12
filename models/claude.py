@@ -1,13 +1,22 @@
-from anthropic import Anthropic, HUMAN_PROMPT, AI_PROMPT
-import time
 import os
-from copy import deepcopy
+import time
 import urllib.request
+from copy import deepcopy
+
+from anthropic import AI_PROMPT, HUMAN_PROMPT, Anthropic
 
 from models.LLMBase import LLMBase
 
+
 class ClaudeLLM(LLMBase):
-    def __init__(self, api_key=None, model = None, max_attempts = 100, max_tokens=256, temperature=0.7):
+    def __init__(
+        self,
+        api_key=None,
+        model=None,
+        max_attempts=100,
+        max_tokens=256,
+        temperature=0.7,
+    ):
         super().__init__(api_key=api_key)
         if api_key is not None:
             ClaudeLLM.api_key = api_key
@@ -24,15 +33,21 @@ class ClaudeLLM(LLMBase):
         }
         self.max_attempts = max_attempts
         self.delay_seconds = 3
-        
+
         # wget https://public-json-tokenization-0d8763e8-0d7e-441b-a1e2-1c73b8e79dc3.storage.googleapis.com/claude-v1-tokenization.json
         from transformers import PreTrainedTokenizerFast
-        urllib.request.urlretrieve("https://public-json-tokenization-0d8763e8-0d7e-441b-a1e2-1c73b8e79dc3.storage.googleapis.com/claude-v1-tokenization.json", "files/claude-v1-tokenization.json")
-        self.tokenizer = PreTrainedTokenizerFast(tokenizer_file="files/claude-v1-tokenization.json")    
-    
+
+        urllib.request.urlretrieve(
+            "https://public-json-tokenization-0d8763e8-0d7e-441b-a1e2-1c73b8e79dc3.storage.googleapis.com/claude-v1-tokenization.json",
+            "files/claude-v1-tokenization.json",
+        )
+        self.tokenizer = PreTrainedTokenizerFast(
+            tokenizer_file="files/claude-v1-tokenization.json"
+        )
+
     def load_model(self):
         pass
-        
+
     def query_remote_model(self, prompt, messages=None):
         if messages is None:
             system_prompt = ""
@@ -41,14 +56,14 @@ class ClaudeLLM(LLMBase):
         else:
             query_prompt = ""
             for msg in messages:
-                if msg['role'] == 'system':
-                    query_prompt += msg['content']
-                elif msg['role'] == 'user':
+                if msg["role"] == "system":
+                    query_prompt += msg["content"]
+                elif msg["role"] == "user":
                     query_prompt += f"{HUMAN_PROMPT} {msg['content']}"
-                elif msg['role'] == 'assistant':
+                elif msg["role"] == "assistant":
                     query_prompt += f"{AI_PROMPT} {msg['content']}"
             query_prompt += f"{AI_PROMPT}"
-        
+
         payload = deepcopy(self.payload)
         payload["prompt"] = query_prompt
         n_attempt = 0
@@ -57,9 +72,7 @@ class ClaudeLLM(LLMBase):
                 client = Anthropic(
                     api_key=self.api_key,
                 )
-                message = client.completions.create(
-                    **payload
-                )
+                message = client.completions.create(**payload)
                 response = message.completion
             except Exception as e:
                 # Catch any exception that might occur and print an error message
